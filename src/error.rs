@@ -18,6 +18,12 @@ pub enum KvsError {
 
     /// Corrupted data
     CorruptedData,
+
+    /// String error
+    StringError(String),
+
+    /// Serialization error
+    Serialization(Box<bincode::ErrorKind>),
 }
 
 impl From<io::Error> for KvsError {
@@ -29,6 +35,12 @@ impl From<io::Error> for KvsError {
 impl From<prost::DecodeError> for KvsError {
     fn from(value: prost::DecodeError) -> KvsError {
         KvsError::Deserialize(value)
+    }
+}
+
+impl From<Box<bincode::ErrorKind>> for KvsError {
+    fn from(err: Box<bincode::ErrorKind>) -> Self {
+        KvsError::Serialization(err)
     }
 }
 

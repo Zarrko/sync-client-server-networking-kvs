@@ -6,6 +6,8 @@ pub use error::{KvsError, Result};
 
 mod engines;
 mod error;
+mod client;
+mod common;
 
 #[allow(missing_docs)]
 pub mod kvs_command {
