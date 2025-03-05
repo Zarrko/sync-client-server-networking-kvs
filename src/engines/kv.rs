@@ -12,6 +12,8 @@ use prost::Message;
 use std::ffi::OsStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use super::KvsEngine;
+
 const COMPACTION_THRESHOLD: u64 = 1024 * 1024;
 const CURRENT_SCHEMA_VERSION: u64 = 1;
 
@@ -115,139 +117,6 @@ impl KvStore {
         })
     }
 
-    /// Sets the value of a string key to a string.
-    ///
-    /// If the key already exists, the previous value will be overwritten.
-    ///
-    /// # Errors
-    ///
-    /// It propagates I/O or serialization errors during writing the log.
-    pub fn set_v2(&mut self, key: String, value: String) -> Result<()> {
-        let sequence = self.current_sequence.unwrap_or(0) + 1;
-        self.current_sequence = Some(sequence);
-
-        let cmd = KvsCommand::set(key, value, sequence);
-        let pos = self.writer.pos;
-
-        let cmd_bytes = cmd.encode_to_vec();
-
-        // Write length prefix (4 bytes, little endian)
-        self.writer
-            .write_all(&(cmd_bytes.len() as u32).to_le_bytes())?;
-
-        // Write actual message
-        self.writer.write_all(&cmd_bytes)?;
-        self.writer.flush()?;
-
-        // Update index and track uncompacted bytes
-        if let Some(kvs_command::Command::Set(set)) = cmd.command {
-            if let Some(old_cmd) = self.index.insert(
-                set.key,
-                CommandPos {
-                    geneeration: self.current_geneeration,
-                    pos,
-                    len: self.writer.pos - pos,
-                },
-            ) {
-                self.uncompacted += old_cmd.len;
-            }
-        }
-
-        if self.uncompacted > COMPACTION_THRESHOLD {
-            self.compact()?;
-        }
-
-        Ok(())
-    }
-
-    /// Gets the string value of a given string key.
-    ///
-    /// Returns `None` if the given key does not exist.
-    ///
-    /// # Errors
-    ///
-    /// It returns `KvsError::UnexpectedCommandType` if the given command type unexpected.
-    pub fn get_v2(&mut self, key: String) -> Result<Option<String>> {
-        if let Some(cmd_pos) = self.index.get(&key) {
-            let reader = self
-                .readers
-                .get_mut(&cmd_pos.geneeration)
-                .expect("Cannot find log reader");
-            reader.seek(SeekFrom::Start(cmd_pos.pos))?;
-
-            // Prefix
-            let mut len_bytes = [0u8; 4];
-            reader.read_exact(&mut len_bytes)?;
-            let msg_len = u32::from_le_bytes(len_bytes) as usize;
-
-            // Read message
-            let mut msg_bytes = vec![0; msg_len];
-            reader.read_exact(&mut msg_bytes)?;
-
-            let cmd = KvsCommand::decode(&msg_bytes[..])?;
-            if !cmd.verify_checksum() {
-                return Err(KvsError::CorruptedData);
-            }
-
-            if let Some(command) = cmd.command {
-                if let kvs_command::Command::Set(set) = command {
-                    Ok(Some(set.value))
-                } else {
-                    Err(KvsError::UnexpectedCommandType)
-                }
-            } else {
-                Ok(None)
-            }
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Removes a given key.
-    ///
-    /// # Errors
-    ///
-    /// It returns `KvsError::KeyNotFound` if the given key is not found.
-    ///
-    /// It propagates I/O or serialization errors during writing the log.
-    pub fn remove_v2(&mut self, key: String) -> Result<()> {
-        if self.index.contains_key(&key) {
-            let sequence = self.current_sequence.unwrap_or(0) + 1;
-            self.current_sequence = Some(sequence);
-
-            let cmd = KvsCommand::remove(key, sequence);
-
-            let cmd_bytes = cmd.encode_to_vec();
-
-            // Write length prefix (4 bytes, little endian)
-            self.writer
-                .write_all(&(cmd_bytes.len() as u32).to_le_bytes())?;
-
-            // Write actual message
-            self.writer.write_all(&cmd_bytes)?;
-            self.writer.flush()?;
-
-            if let Some(command) = cmd.command {
-                if let kvs_command::Command::Remove(remove) = command {
-                    if let Some(old_cmd) = self.index.remove(&remove.key) {
-                        // The remove command itself will be deleted in compaction
-                        // once a key is removed, both the original set command and the remove command become "stale"
-                        // and can be eliminated during compaction.
-                        self.uncompacted += old_cmd.len;
-                    }
-                }
-            }
-
-            if self.uncompacted > COMPACTION_THRESHOLD {
-                self.compact()?;
-            }
-
-            Ok(())
-        } else {
-            Err(KvsError::KeyNotFound)
-        }
-    }
-
     /// Clears stale entries in the log. And rewrites latest values in a new log file
     pub fn compact(&mut self) -> Result<()> {
         println!(
@@ -327,6 +196,141 @@ impl KvStore {
     }
 }
 
+impl KvsEngine for KvStore {
+
+    /// Sets the value of a string key to a string.
+    ///
+    /// If the key already exists, the previous value will be overwritten.
+    ///
+    /// # Errors
+    ///
+    /// It propagates I/O or serialization errors during writing the log.
+    fn set(&mut self, key: String, value: String) -> Result<()> {
+        let sequence = self.current_sequence.unwrap_or(0) + 1;
+        self.current_sequence = Some(sequence);
+
+        let cmd = KvsCommand::set(key, value, sequence);
+        let pos = self.writer.pos;
+
+        let cmd_bytes = cmd.encode_to_vec();
+
+        // Write length prefix (4 bytes, little endian)
+        self.writer
+            .write_all(&(cmd_bytes.len() as u32).to_le_bytes())?;
+
+        // Write actual message
+        self.writer.write_all(&cmd_bytes)?;
+        self.writer.flush()?;
+
+        // Update index and track uncompacted bytes
+        if let Some(kvs_command::Command::Set(set)) = cmd.command {
+            if let Some(old_cmd) = self.index.insert(
+                set.key,
+                CommandPos {
+                    geneeration: self.current_geneeration,
+                    pos,
+                    len: self.writer.pos - pos,
+                },
+            ) {
+                self.uncompacted += old_cmd.len;
+            }
+        }
+
+        if self.uncompacted > COMPACTION_THRESHOLD {
+            self.compact()?;
+        }
+
+        Ok(())
+    }
+
+    /// Gets the string value of a given string key.
+    ///
+    /// Returns `None` if the given key does not exist.
+    ///
+    /// # Errors
+    ///
+    /// It returns `KvsError::UnexpectedCommandType` if the given command type unexpected.
+    fn get(&mut self, key: String) -> Result<Option<String>> {
+        if let Some(cmd_pos) = self.index.get(&key) {
+            let reader = self
+                .readers
+                .get_mut(&cmd_pos.geneeration)
+                .expect("Cannot find log reader");
+            reader.seek(SeekFrom::Start(cmd_pos.pos))?;
+
+            // Prefix
+            let mut len_bytes = [0u8; 4];
+            reader.read_exact(&mut len_bytes)?;
+            let msg_len = u32::from_le_bytes(len_bytes) as usize;
+
+            // Read message
+            let mut msg_bytes = vec![0; msg_len];
+            reader.read_exact(&mut msg_bytes)?;
+
+            let cmd = KvsCommand::decode(&msg_bytes[..])?;
+            if !cmd.verify_checksum() {
+                return Err(KvsError::CorruptedData);
+            }
+
+            if let Some(command) = cmd.command {
+                if let kvs_command::Command::Set(set) = command {
+                    Ok(Some(set.value))
+                } else {
+                    Err(KvsError::UnexpectedCommandType)
+                }
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Removes a given key.
+    ///
+    /// # Errors
+    ///
+    /// It returns `KvsError::KeyNotFound` if the given key is not found.
+    ///
+    /// It propagates I/O or serialization errors during writing the log.
+    fn remove(&mut self, key: String) -> Result<()> {
+        if self.index.contains_key(&key) {
+            let sequence = self.current_sequence.unwrap_or(0) + 1;
+            self.current_sequence = Some(sequence);
+
+            let cmd = KvsCommand::remove(key, sequence);
+
+            let cmd_bytes = cmd.encode_to_vec();
+
+            // Write length prefix (4 bytes, little endian)
+            self.writer
+                .write_all(&(cmd_bytes.len() as u32).to_le_bytes())?;
+
+            // Write actual message
+            self.writer.write_all(&cmd_bytes)?;
+            self.writer.flush()?;
+
+            if let Some(command) = cmd.command {
+                if let kvs_command::Command::Remove(remove) = command {
+                    if let Some(old_cmd) = self.index.remove(&remove.key) {
+                        // The remove command itself will be deleted in compaction
+                        // once a key is removed, both the original set command and the remove command become "stale"
+                        // and can be eliminated during compaction.
+                        self.uncompacted += old_cmd.len;
+                    }
+                }
+            }
+
+            if self.uncompacted > COMPACTION_THRESHOLD {
+                self.compact()?;
+            }
+
+            Ok(())
+        } else {
+            Err(KvsError::KeyNotFound)
+        }
+    }
+}
 /// Create a new log file with given geneerationeration number and add the reader to the readers map.
 ///
 /// Returns the writer to the log.
