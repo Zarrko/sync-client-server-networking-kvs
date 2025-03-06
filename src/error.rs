@@ -1,4 +1,6 @@
 use std::io;
+use std::str::Utf8Error;
+use std::string::FromUtf8Error;
 
 #[derive(Debug)]
 
@@ -24,6 +26,9 @@ pub enum KvsError {
 
     /// Serialization error
     Serialization(Box<bincode::ErrorKind>),
+
+    /// SledError
+    SledError(sled::Error),
 }
 
 impl From<io::Error> for KvsError {
@@ -41,6 +46,18 @@ impl From<prost::DecodeError> for KvsError {
 impl From<Box<bincode::ErrorKind>> for KvsError {
     fn from(err: Box<bincode::ErrorKind>) -> Self {
         KvsError::Serialization(err)
+    }
+}
+
+impl From<sled::Error> for KvsError {
+    fn from(err: sled::Error) -> KvsError {
+        KvsError::SledError(err)
+    }
+}
+
+impl From<FromUtf8Error> for KvsError {
+    fn from(err: FromUtf8Error) -> KvsError {
+        KvsError::StringError(err.to_string())
     }
 }
 
