@@ -10,7 +10,7 @@ impl SledKvsEngine {
     }
 }
 /// An embedded LSM Tree Database.
-/// Writes: Go to a buffer called MemTable which is a B-Tree/SkipList
+/// Writes: Go to an in-memory buffer called MemTable which is a B-Tree/SkipList
 /// When MemTables reaches a certain size, flush to Disk as immutable SortedStringTable (SSTs)
 /// Over time, the number of SSTables would grow unbounded, compaction removes duplicate keys,
 /// deleted entries are purged
