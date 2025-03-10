@@ -1,5 +1,6 @@
 use crate::Result;
 
+#[allow(missing_docs)]
 pub trait KvsEngine
 {
     fn set(&mut self, key: String, value: String) -> Result<()>;
@@ -14,3 +15,4 @@ mod kv;
 mod sled;
 
 pub use self::kv::KvStore;
+pub use self::sled::SledKvsEngine;

@@ -6,10 +6,12 @@ use crate::common::{GetResponse, RemoveResponse, Request, SetResponse};
 use crate::engines::KvsEngine;
 use crate::Result;
 
+#[allow(missing_docs)]
 pub struct KvsServer<E: KvsEngine> {
     engine: E,
 }
 
+#[allow(missing_docs)]
 impl<E: KvsEngine> KvsServer<E> {
     pub fn new(engine: E) -> Self {
         KvsServer { engine }

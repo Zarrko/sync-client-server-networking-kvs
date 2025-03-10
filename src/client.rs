@@ -4,11 +4,13 @@ use std::io::{BufReader, BufWriter, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use serde::{Deserialize, Serialize};
 
+#[allow(missing_docs)]
 pub struct KvsClient {
     reader: BufReader<TcpStream>,
     writer: BufWriter<TcpStream>,
 }
 
+#[allow(missing_docs)]
 impl KvsClient {
     pub fn connect<A: ToSocketAddrs>(addr: A) -> Result<Self> {
         let tcp_reader = TcpStream::connect(addr)?;
