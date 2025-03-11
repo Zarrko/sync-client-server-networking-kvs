@@ -1,6 +1,6 @@
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
-use log::{debug, error};
+use log::{debug, error, info};
 use serde::Serialize;
 use crate::common::{GetResponse, RemoveResponse, Request, SetResponse};
 use crate::engines::KvsEngine;
@@ -54,7 +54,7 @@ impl<E: KvsEngine> KvsServer<E> {
             let mut len_bytes = [0u8; 4];
             if let Err(e) = reader.read_exact(&mut len_bytes) {
                 if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                    error!("Got EOF when reading from the server");
+                    info!("Client disconnected");
                     break;
                 }
 
