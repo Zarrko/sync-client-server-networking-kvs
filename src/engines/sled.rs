@@ -27,7 +27,7 @@ impl KvsEngine for SledKvsEngine {
     }
 
     fn get(&mut self, key: String) -> crate::Result<Option<String>> {
-        match self.0.get(&key.as_bytes())? {
+        match self.0.get(key.as_bytes())? {
             Some(value) => {
                 let val = String::from_utf8(value.to_vec())?;
                 Ok(Some(val))
@@ -37,7 +37,7 @@ impl KvsEngine for SledKvsEngine {
     }
 
     fn remove(&mut self, key: String) -> crate::Result<()> {
-        self.0.remove(&key.as_bytes())?;
+        self.0.remove(key.as_bytes())?;
         self.0.flush()?;
         Ok(())
     }
