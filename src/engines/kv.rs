@@ -39,6 +39,7 @@ const CURRENT_SCHEMA_VERSION: u64 = 1;
 /// Deleting the old log files
 ///
 /// This is why it's called "log-structured" - all operations are simply appended to a log, and compaction handles cleanup of old/stale data.
+
 pub struct KvStore {
     // directory for the log and other data.
     path: PathBuf,
@@ -57,6 +58,11 @@ pub struct KvStore {
 }
 
 impl KvStore {
+    /// Clone KvStore
+    pub fn clone(&self) -> Result<KvStore> {
+        todo!()
+    }
+
     /// Opens a `KvStore` with the given path.
     ///
     /// This will create a new directory if the given one does not exist.

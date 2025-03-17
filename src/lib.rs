@@ -12,6 +12,9 @@ mod error;
 mod server;
 
 #[allow(missing_docs)]
+pub mod thread_pool;
+
+#[allow(missing_docs)]
 pub mod kvs_command {
     include!(concat!(env!("OUT_DIR"), "/kvs_command.rs"));
 }

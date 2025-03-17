@@ -375,8 +375,10 @@ dependencies = [
  "bincode",
  "clap",
  "crc32fast",
+ "crossbeam-utils",
  "env_logger",
  "log",
+ "panic-control",
  "predicates",
  "prost",
  "prost-build",
@@ -455,6 +457,12 @@ name = "once_cell"
 version = "1.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "945462a4b81e43c4e3ba96bd7b49d834c6f61198356aa858733bc4acf3cbe62e"
+
+[[package]]
+name = "panic-control"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "159973aebc43b4640619042b3bf160e3b6348000a949e37c0806ae6acc79d6c7"
 
 [[package]]
 name = "parking_lot"
