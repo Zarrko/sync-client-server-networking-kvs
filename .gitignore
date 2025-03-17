@@ -1,3 +1,5 @@
 /target
-/1.log
+*.log
 /kvs_config.toml
+.vscode/
+.idea/
