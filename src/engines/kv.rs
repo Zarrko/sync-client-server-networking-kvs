@@ -202,6 +202,12 @@ impl KvStore {
     }
 }
 
+impl Clone for KvStore {
+    fn clone(&self) -> Self {
+        todo!()
+    }
+}
+
 impl KvsEngine for KvStore {
 
     /// Sets the value of a string key to a string.
