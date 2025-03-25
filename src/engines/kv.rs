@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::cmp::max;
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{self, File, OpenOptions};
@@ -10,8 +11,10 @@ use crate::{KvsError, Result};
 use crc32fast::Hasher;
 use prost::Message;
 use std::ffi::OsStr;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::AtomicU64;
 use std::time::{SystemTime, UNIX_EPOCH};
-
+use skiplist::SkipMap;
 use super::KvsEngine;
 
 const COMPACTION_THRESHOLD: u64 = 1024 * 1024;
@@ -55,6 +58,76 @@ pub struct KvStore {
     current_sequence: Option<u64>,
     reader_buffer_size: usize,
     writer_buffer_size: usize,
+}
+
+/// Manages readonly access to the store.
+///
+/// Arc (Atomic Reference Counting): Thread-safe shared ownership of a value
+/// Allows multiple owners across threads
+/// Only deallocates when all references are dropped
+///
+/// Mutex (Mutual Exclusion) Provides exclusive access to data
+/// Only one thread can access the protected data at a time
+/// Used to protect KvStoreWriter since writes need exclusive access
+/// Blocks other threads until the lock is released
+///
+/// RefCell Provides interior mutability in a single-threaded context Enforces borrowing rules at runtime (not compile time)
+/// Used for readers map to allow mutation through shared references Not thread-safe - only used within a single thread
+///
+/// SkipMap Lock-free concurrent map implementation Allows multiple readers even during writes
+/// Higher performance than a mutex-protected map for read-heavy workloads
+/// Used for the key-value index to enable concurrent lookups
+///
+/// AtomicU64 Thread-safe integer that can be updated atomically Operations don't require locks
+/// Used for safe_point to track generation numbers across threads Enables wait-free coordination between readers and writer
+struct KvStoreReader {
+    // Buffer size for file readers
+    reader_buffer_size: usize,
+
+    // Per-thread map of generation numbers to file readers
+    // Uses RefCell for interior mutability without thread-safety overhead
+    readers: RefCell<HashMap<u64, BufReaderWithPos<File>>>,
+
+    // Atomic generation number indicating the oldest generation that's safe to read
+    // Updated during compaction to prevent readers from accessing compacted files
+    safe_point: Arc<AtomicU64>,
+
+    // Reader component for handling all read operations
+    reader: KvStoreReader,
+
+    // Writer component for handling all write operations
+    // Protected by Mutex to ensure exclusive access for writes
+    writer: Arc<Mutex<KvStoreWriter>>,
+}
+
+/// Manages write operations to the store.
+struct KvStoreWriter {
+    // Buffer size for file writer
+    writer_buffer_size: usize,
+
+    // Current log file write with position tracking
+    writer: BufWriterWithPos<File>,
+
+    // current generation for log being written
+    current_generation: u64,
+
+    // track bytes of stale commands that can be removed
+    uncompacted: u64,
+
+    // Optional sequence number for transactions or entries
+    current_sequence: Option<u64>,
+}
+
+/// ToDo: Replace KvStore above with this
+pub struct SharedKvStore
+{
+    // Directory path for the log and other data files
+    // Shared between reader and writer components
+    path: Arc<PathBuf>,
+
+    // In-memory index mapping keys to their positions in log files
+    // Using SkipMap for lock-free concurrent reads
+    index: Arc<SkipMap<String, CommandPos>>,
 }
 
 impl KvStore {
